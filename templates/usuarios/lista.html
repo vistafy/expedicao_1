@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block titulo %}Usuários{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4">Gerenciamento de Usuários</h2>
+
+  <!-- Mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Botão para novo usuário -->
+  <div class="mb-3">
+    <a href="{{ url_for('usuarios.novo') }}" class="btn btn-success">
+      <i class="bi bi-person-plus"></i> Novo Usuário
+    </a>
+  </div>
+
+  <!-- Tabela de usuários -->
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome completo</th>
+            <th>Usuário</th>
+            <th>Email</th>
+            <th>Papel</th>
+            <th>Filial / Loja</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in usuarios %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.nome_completo }}</td>
+            <td>{{ u.username }}</td>
+            <td>{{ u.email }}</td>
+            <td>
+              {% if u.role == 'admin' %}
+                <span class="badge bg-danger">Admin</span>
+              {% else %}
+                <span class="badge bg-secondary">User</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.loja_nome %}
+                {{ u.loja_nome }}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="btn-group" role="group">
+                <a href="{{ url_for('usuarios.editar', id=u.id) }}" class="btn btn-sm btn-primary">
+                  <i class="bi bi-pencil"></i> Editar
+                </a>
+                <form action="{{ url_for('usuarios.excluir', id=u.id) }}" method="post" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja excluir este usuário?');">
+                    <i class="bi bi-trash"></i> Excluir
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" class="text-center text-muted">Nenhum usuário cadastrado.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

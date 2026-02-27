@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block titulo %}Detalhes do Lote{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4 text-primary"><i class="bi bi-box-seam"></i> Detalhes do Lote #{{ lote.id }}</h2>
+
+  <!-- Mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Informações do lote -->
+  <div class="card mb-4 shadow-sm rounded-3">
+    <div class="card-body">
+      <p><strong>Código:</strong> {{ lote.codigo }}</p>
+      <p><strong>Departamento:</strong> {{ lote.departamento }}</p>
+      <p><strong>Seção:</strong> {{ lote.secao }}</p>
+      <p><strong>Status:</strong> 
+        {% if lote.status == 'finalizado' %}
+          <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i> Finalizado</span>
+        {% elif lote.status == 'ativo' %}
+          <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i> Ativo</span>
+        {% else %}
+          <span class="badge bg-secondary">{{ lote.status|capitalize }}</span>
+        {% endif %}
+      </p>
+      <p><strong>Criado em:</strong> {{ lote.criado_em }}</p>
+      <p><strong>Usuário:</strong> {{ lote.usuario_nome }} ({{ lote.usuario_login }})</p>
+      <p><strong>Lojas vinculadas:</strong> {{ lojas|join(', ') }}</p>
+    </div>
+  </div>
+
+  <!-- Registros vinculados -->
+  <h4 class="mb-3">Registros do Lote</h4>
+  <div class="card shadow-sm rounded-3">
+    <div class="card-body table-responsive">
+      {% if agrupados %}
+        {% for chave, registros in agrupados.items() %}
+          {% set codigo, descricao = chave.split('|') %}
+          <div class="mb-4">
+            <h6 class="fw-bold">{{ codigo }} — {{ descricao }}</h6>
+            <table class="table table-sm table-bordered align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th>Loja</th>
+                  <th>Tara (kg)</th>
+                  <th>Peso Bruto (kg)</th>
+                  <th>Peso Líquido (kg)</th>
+                  <th>Quantidade</th>
+                  <th>Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in registros %}
+                <tr>
+                  <td>{{ r.loja }}</td>
+                  <td>{{ "%.3f"|format(r.tara_kg)|replace(".", ",") }}</td>
+                  <td>{{ "%.3f"|format(r.peso_bruto_kg)|replace(".", ",") }}</td>
+                  <td>{{ "%.3f"|format(r.peso_liquido_kg)|replace(".", ",") }}</td>
+                  <td>{{ r.quantidade }}</td>
+                  <td>{{ r.criado_em }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> Nenhum registro encontrado para este lote.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Ações -->
+  <div class="d-flex flex-wrap gap-3 mt-4">
+    {% if lote.status != 'finalizado' %}
+      <a href="{{ url_for('lotes.registrar', id=lote.id) }}" class="btn btn-success">
+        <i class="bi bi-plus-circle"></i> Registrar Produto
+      </a>
+      <a href="{{ url_for('lotes.finalizar', lote_id=lote.id) }}" class="btn btn-primary">
+        <i class="bi bi-check-circle"></i> Finalizar Lote
+      </a>
+    {% endif %}
+    <a href="{{ url_for('lotes.exportar_planilha', id=lote.id) }}" class="btn btn-outline-success">
+      <i class="bi bi-file-earmark-spreadsheet"></i> Exportar Excel
+    </a>
+    <a href="{{ url_for('lotes.lotes') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </div>
+
+  <!-- Rodapé institucional -->
+  <p class="small text-muted mt-4">© {{ current_year }} Expedição DB — Central Panificação Boa Vista - RR</p>
+</div>
+{% endblock %}

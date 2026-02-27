@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block titulo %}Lotes{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4 text-primary"><i class="bi bi-box-seam"></i> Gerenciamento de Lotes</h2>
+
+  <!-- Mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <a href="{{ url_for('lotes.novo') }}" class="btn btn-success mb-3">
+    <i class="bi bi-plus-circle"></i> Novo Lote
+  </a>
+
+  {% if lotes %}
+  <div class="card shadow-sm rounded-3">
+    <div class="card-body table-responsive">
+      <table class="table table-striped table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Departamento</th>
+            <th>Seção</th>
+            <th>Status</th>
+            <th>Criado em</th>
+            <th class="text-center">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for lote in lotes %}
+          <tr>
+            <td>{{ lote.id }}</td>
+            <td>{{ lote.departamento }}</td>
+            <td>{{ lote.secao }}</td>
+            <td>
+              {% if lote.status == "ativo" %}
+                <span class="badge bg-success">Ativo</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ lote.status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ lote.criado_em }}</td>
+            <td class="text-center">
+              <a href="{{ url_for('lotes.selecionar_lojas', lote_id=lote.id) }}" class="btn btn-sm btn-warning">
+                <i class="bi bi-shop"></i> Lojas
+              </a>
+              <a href="{{ url_for('lotes.registrar', id=lote.id) }}" class="btn btn-sm btn-success">
+                <i class="bi bi-box-seam"></i> Registrar
+              </a>
+              <a href="{{ url_for('lotes.ver_lote', lote_id=lote.id) }}" class="btn btn-sm btn-info text-white">
+                <i class="bi bi-eye"></i> Ver
+              </a>
+              <a href="{{ url_for('lotes.exportar_lote', lote_id=lote.id) }}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-file-earmark-spreadsheet"></i> Exportar
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+    <div class="alert alert-info"><i class="bi bi-info-circle"></i> Nenhum lote cadastrado ainda.</div>
+  {% endif %}
+</div>
+{% endblock %}

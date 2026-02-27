@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block titulo %}Configurações do Sistema{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h1 class="mb-4">
+    <i class="bi bi-sliders"></i> Configurações
+  </h1>
+  <p class="lead">Ajuste parâmetros e preferências do sistema.</p>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-body">
+      <h5 class="card-title">Parâmetros Gerais</h5>
+      <form method="post" action="{{ url_for('admin.configuracoes') }}">
+        
+        <!-- Tema -->
+        <div class="mb-3">
+          <label for="tema" class="form-label">Tema do Sistema</label>
+          <select id="tema" name="tema" class="form-select" aria-label="Selecione o tema do sistema">
+            <option value="claro">Claro</option>
+            <option value="escuro">Escuro</option>
+          </select>
+        </div>
+
+        <!-- E-mail de notificação -->
+        <div class="mb-3">
+          <label for="email_notificacao" class="form-label">E-mail de Notificação</label>
+          <input type="email" id="email_notificacao" name="email_notificacao" 
+                 class="form-control" placeholder="admin@exemplo.com" 
+                 aria-label="Digite o e-mail de notificação">
+        </div>
+
+        <!-- Botão -->
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-save"></i> Salvar Configurações
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

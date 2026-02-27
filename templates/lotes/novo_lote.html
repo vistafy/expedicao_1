@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block titulo %}Novo Lote{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4">Criar Novo Lote</h2>
+
+  <!-- Exibir mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Formulário aponta para rota POST /lotes/criar -->
+  <form method="post" action="{{ url_for('lotes.criar') }}" class="card shadow-sm p-4">
+    <div class="mb-3">
+      <label for="departamento" class="form-label">Departamento</label>
+      <select id="departamento" name="departamento" class="form-select" required>
+        <option value="">Selecione...</option>
+        {% for dep in departamentos %}
+          <option value="{{ dep }}">{{ dep }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label for="secao" class="form-label">Seção</label>
+      <select id="secao" name="secao" class="form-select" required>
+        <option value="">Selecione um departamento primeiro...</option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-check-circle"></i> Criar
+    </button>
+    <a href="{{ url_for('lotes.lotes') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </form>
+</div>
+
+<script>
+document.getElementById("departamento").addEventListener("change", function() {
+  const departamento = this.value;
+  const secaoSelect = document.getElementById("secao");
+  secaoSelect.innerHTML = "<option>Carregando...</option>";
+
+  if (departamento) {
+    fetch(`/lotes/secoes/${encodeURIComponent(departamento)}`)
+      .then(response => {
+        if (!response.ok) throw new Error("Erro ao carregar seções");
+        return response.json();
+      })
+      .then(secoes => {
+        secaoSelect.innerHTML = "<option value=''>Selecione...</option>";
+        secoes.forEach(sec => {
+          const opt = document.createElement("option");
+          opt.value = sec;
+          opt.textContent = sec;
+          secaoSelect.appendChild(opt);
+        });
+      })
+      .catch(() => {
+        secaoSelect.innerHTML = "<option value=''>Erro ao carregar seções</option>";
+      });
+  } else {
+    secaoSelect.innerHTML = "<option value=''>Selecione um departamento primeiro...</option>";
+  }
+});
+</script>
+{% endblock %}

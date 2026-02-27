@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block titulo %}Novo Usuário{% endblock %}
+
+{% block conteudo %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+  <div class="card shadow-lg p-4" style="max-width: 450px; width: 100%;">
+    <div class="card-body">
+      <h3 class="card-title text-center mb-4">Cadastrar Usuário</h3>
+
+      <!-- Mensagens de feedback -->
+      {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+          {% for categoria, msg in mensagens %}
+            <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <!-- Formulário de cadastro -->
+      <form method="POST" action="{{ url_for('usuarios.novo') }}">
+        <div class="mb-3">
+          <label for="nome_completo" class="form-label">Nome completo</label>
+          <input type="text" class="form-control" id="nome_completo" name="nome_completo"
+                 placeholder="Digite o nome completo" required autocomplete="name">
+        </div>
+
+        <div class="mb-3">
+          <label for="cpf" class="form-label">CPF</label>
+          <input type="text" class="form-control" id="cpf" name="cpf"
+                 placeholder="Digite o CPF" required maxlength="14" autocomplete="off">
+          <small class="text-muted">Formato: 000.000.000-00</small>
+        </div>
+
+        <div class="mb-3">
+          <label for="username" class="form-label">Usuário</label>
+          <input type="text" class="form-control" id="username" name="username"
+                 placeholder="Digite o usuário" required autocomplete="username" autofocus>
+        </div>
+
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email"
+                 placeholder="Digite o email" required autocomplete="email">
+        </div>
+
+        <div class="mb-3">
+          <label for="senha" class="form-label">Senha</label>
+          <input type="password" class="form-control" id="senha" name="senha"
+                 placeholder="Digite a senha" required autocomplete="new-password">
+        </div>
+
+        <div class="mb-3">
+          <label for="role" class="form-label">Papel</label>
+          <select class="form-select" id="role" name="role">
+            <option value="user" selected>Usuário</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="loja_id" class="form-label">Filial / Loja</label>
+          <select class="form-select" id="loja_id" name="loja_id">
+            <option value="">Selecione a loja</option>
+            {% for loja in lojas %}
+              <option value="{{ loja.id }}">{{ loja.nome }}</option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Obrigatório para usuários comuns.</small>
+        </div>
+
+        <button type="submit" class="btn btn-success w-100">
+          <i class="bi bi-check-circle"></i> Criar Usuário
+        </button>
+      </form>
+
+      <!-- Link para lista -->
+      <div class="text-center mt-3">
+        <small><a href="{{ url_for('usuarios.lista') }}">Voltar para lista</a></small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block titulo %}Editar Usuário{% endblock %}
+
+{% block conteudo %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+  <div class="card shadow-lg p-4" style="max-width: 500px; width: 100%;">
+    <div class="card-body">
+      <h3 class="card-title text-center mb-4">Editar Usuário</h3>
+
+      <!-- Mensagens de feedback -->
+      {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+          {% for categoria, msg in mensagens %}
+            <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <!-- Formulário de edição -->
+      <form method="POST" action="{{ url_for('usuarios.editar', id=usuario.id) }}">
+        <div class="mb-3">
+          <label for="nome_completo" class="form-label">Nome completo</label>
+          <input type="text" class="form-control" id="nome_completo" name="nome_completo"
+                 value="{{ usuario.nome_completo }}" required autocomplete="name">
+        </div>
+
+        <div class="mb-3">
+          <label for="cpf" class="form-label">CPF</label>
+          <input type="text" class="form-control" id="cpf" name="cpf"
+                 value="{{ usuario.cpf }}" required maxlength="14" autocomplete="off">
+          <small class="text-muted">Formato: 000.000.000-00</small>
+        </div>
+
+        <div class="mb-3">
+          <label for="username" class="form-label">Usuário</label>
+          <input type="text" class="form-control" id="username" name="username"
+                 value="{{ usuario.username }}" required autocomplete="username">
+        </div>
+
+        <div class="mb-3">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email"
+                 value="{{ usuario.email }}" required autocomplete="email">
+        </div>
+
+        <div class="mb-3">
+          <label for="senha" class="form-label">Nova Senha</label>
+          <input type="password" class="form-control" id="senha" name="senha"
+                 placeholder="Digite nova senha (opcional)" autocomplete="new-password">
+          <small class="text-muted">Deixe em branco para manter a senha atual.</small>
+        </div>
+
+        <div class="mb-3">
+          <label for="role" class="form-label">Papel</label>
+          <select class="form-select" id="role" name="role">
+            <option value="user" {% if usuario.role == 'user' %}selected{% endif %}>Usuário</option>
+            <option value="admin" {% if usuario.role == 'admin' %}selected{% endif %}>Administrador</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="loja_id" class="form-label">Filial / Loja</label>
+          <select class="form-select" id="loja_id" name="loja_id">
+            <option value="">Selecione a loja</option>
+            {% for loja in lojas %}
+              <option value="{{ loja.id }}" {% if usuario.loja_id == loja.id %}selected{% endif %}>
+                {{ loja.nome }}
+              </option>
+            {% endfor %}
+          </select>
+          <small class="text-muted">Obrigatório para usuários comuns.</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-save"></i> Salvar Alterações
+        </button>
+      </form>
+
+      <!-- Link para lista -->
+      <div class="text-center mt-3">
+        <small><a href="{{ url_for('usuarios.lista') }}">Voltar para lista</a></small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

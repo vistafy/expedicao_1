@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block titulo %}Página Analítica{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2>📊 Página Analítica – {{ loja_nome }}</h2>
+
+  <!-- Filtros: Loja, Departamento e Seção -->
+  <form method="get" action="/analitico/">
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <label for="loja">Loja</label>
+        <select name="loja" id="loja" class="form-select" onchange="this.form.submit()">
+          {% for l in lojas %}
+            <option value="{{ l['id'] }}" {% if loja_id == l['id']|string %}selected{% endif %}>
+              {{ l['nome'] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="departamento">Departamento</label>
+        <select name="departamento" id="departamento" class="form-select" onchange="this.form.submit()">
+          <option value="">Selecione...</option>
+          {% for d in departamentos %}
+            <option value="{{ d['departamento'] }}" {% if d['departamento'] == departamento_sel %}selected{% endif %}>
+              {{ d['departamento'] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label for="secao">Seção</label>
+        <select name="secao" id="secao" class="form-select" onchange="this.form.submit()">
+          <option value="">Selecione...</option>
+          {% for s in secoes %}
+            <option value="{{ s['secao'] }}" {% if s['secao'] == secao_sel %}selected{% endif %}>
+              {{ s['secao'] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </form>
+
+  <!-- Resumo -->
+  <div class="row row-cols-1 row-cols-md-4 g-4 mb-4">
+    <!-- Vendas -->
+    <div class="col d-flex">
+      <div class="card text-center shadow-sm flex-fill h-100">
+        <div class="card-body d-flex flex-column justify-content-between">
+          <h5 class="card-title">Vendas</h5>
+          <p class="display-6 mb-2">{{ resumo.vendas or "R$ 0,00" }}</p>
+          <p class="text-muted">Projeção: {{ projecao.vendas or "R$ 0,00" }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Avarias -->
+    <div class="col d-flex">
+      <div class="card text-center shadow-sm flex-fill h-100">
+        <div class="card-body d-flex flex-column justify-content-between">
+          <h5 class="card-title">Avarias</h5>
+          <p class="display-6 mb-2">{{ resumo.avarias or "R$ 0,00" }}</p>
+          <p class="text-muted">Projeção: {{ projecao.avarias or "R$ 0,00" }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inventário -->
+    <div class="col d-flex">
+      <div class="card text-center shadow-sm flex-fill h-100">
+        <div class="card-body d-flex flex-column justify-content-between">
+          <h5 class="card-title">Inventário</h5>
+          <div class="mb-2 d-flex justify-content-center flex-wrap">
+            {% for d in datas_inventario %}
+              <button type="button" 
+                      class="quadradinho btn btn-light"
+                      onclick="atualizarValor('{{ loja_id }}','inventario','{{ d }}',
+                                               '{{ departamento_sel }}','{{ secao_sel }}',
+                                               '{{ gtin_sel }}','{{ codigo_sel }}', this)">
+                {{ d }}
+              </button>
+            {% endfor %}
+          </div>
+          <p id="valor-inventario" class="display-6 mb-2">{{ resumo.inventario or "R$ 0,00" }}</p>
+          <p class="text-muted">Projeção: {{ projecao.inventario or "R$ 0,00" }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rotativos -->
+    <div class="col d-flex">
+      <div class="card text-center shadow-sm flex-fill h-100">
+        <div class="card-body d-flex flex-column justify-content-between">
+          <h5 class="card-title">Rotativos</h5>
+          <div class="mb-2 d-flex justify-content-center flex-wrap">
+            {% for d in datas_rotativos %}
+              <button type="button" 
+                      class="quadradinho btn btn-light"
+                      onclick="atualizarValor('{{ loja_id }}','rotativos','{{ d }}',
+                                               '{{ departamento_sel }}','{{ secao_sel }}',
+                                               '{{ gtin_sel }}','{{ codigo_sel }}', this)">
+                {{ d }}
+              </button>
+            {% endfor %}
+          </div>
+          <p id="valor-rotativos" class="display-6 mb-2">{{ resumo.rotativos or "R$ 0,00" }}</p>
+          <p class="text-muted">Projeção: {{ projecao.rotativos or "R$ 0,00" }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let inventarioSelecionados = new Set();
+let rotativosSelecionados = new Set();
+let totalInventario = 0;
+let totalRotativos = 0;
+
+function formatBRL(valor) {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function atualizarValor(lojaId, tipo, dataSel, departamento, secao, gtin, codigo, btn) {
+  let url = `/analitico/valor?loja=${lojaId}&tipo=${tipo}&data=${dataSel}`;
+  if (departamento) url += `&departamento=${departamento}`;
+  if (secao) url += `&secao=${secao}`;
+  if (gtin) url += `&gtin=${gtin}`;
+  if (codigo) url += `&codigo=${codigo}`;
+
+  fetch(url)
+    .then(response => response.json())
+    .then(data => {
+      let valor = parseFloat(data.valor.replace("R$","").replace(/\./g,"").replace(",","."));
+
+      if (tipo === "inventario") {
+        if (inventarioSelecionados.has(dataSel)) {
+          // já estava selecionada → resetar
+          inventarioSelecionados.clear();
+          totalInventario = 0;
+        } else {
+          inventarioSelecionados.add(dataSel);
+          totalInventario += valor;
+        }
+        document.getElementById("valor-inventario").innerText = formatBRL(totalInventario);
+
+        // destaque visual
+        const container = btn.closest(".card-body");
+        container.querySelectorAll(".quadradinho").forEach(b => {
+          b.classList.remove("btn-primary");
+          b.classList.add("btn-light");
+        });
+        inventarioSelecionados.forEach(d => {
+          container.querySelectorAll(".quadradinho").forEach(b => {
+            if (b.innerText.trim() === d) {
+              b.classList.remove("btn-light");
+              b.classList.add("btn-primary");
+            }
+          });
+        });
+      }
+
+      if (tipo === "rotativos") {
+        if (rotativosSelecionados.has(dataSel)) {
+          rotativosSelecionados.clear();
+          totalRotativos = 0;
+        } else {
+          rotativosSelecionados.add(dataSel);
+          totalRotativos += valor;
+        }
+        document.getElementById("valor-rotativos").innerText = formatBRL(totalRotativos);
+
+        const container = btn.closest(".card-body");
+        container.querySelectorAll(".quadradinho").forEach(b => {
+          b.classList.remove("btn-primary");
+          b.classList.add("btn-light");
+        });
+        rotativosSelecionados.forEach(d => {
+          container.querySelectorAll(".quadradinho").forEach(b => {
+            if (b.innerText.trim() === d) {
+              b.classList.remove("btn-light");
+              b.classList.add("btn-primary");
+            }
+          });
+        });
+      }
+    });
+}
+</script>
+{% endblock %}

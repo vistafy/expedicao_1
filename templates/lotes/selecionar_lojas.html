@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+{% block titulo %}Selecionar Lojas{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4">Selecionar Lojas para o Lote #{{ lote_id }}</h2>
+
+  <!-- Mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Formulário com action explícito -->
+  <form method="post" action="{{ url_for('lotes.selecionar_lojas', lote_id=lote_id) }}" id="formSelecionarLojas" class="card shadow-sm p-4">
+    <div class="mb-3">
+      <button type="button" class="btn btn-outline-primary btn-sm" onclick="toggleSelecionarTodos(true)">
+        <i class="bi bi-check2-all"></i> Selecionar Todos
+      </button>
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelecionarTodos(false)">
+        <i class="bi bi-x-circle"></i> Limpar Seleção
+      </button>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Selecionar</th>
+            <th>Código</th>
+            <th>Nome da Loja</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for loja in lojas %}
+          <tr id="linha_loja_{{ loja.id }}">
+            <td>
+              <input type="checkbox" name="lojas" value="{{ loja.id }}" id="loja_{{ loja.id }}"
+                     {% if loja.id|string in vinculadas %}checked{% endif %}
+                     onchange="destacarLinha({{ loja.id }})">
+            </td>
+            <td>{{ loja.codigo }}</td>
+            <td><label for="loja_{{ loja.id }}">{{ loja.nome }}</label></td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">Nenhuma loja cadastrada.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-check-circle"></i> Vincular Lojas
+    </button>
+    <a href="{{ url_for('lotes.lotes') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function toggleSelecionarTodos(marcar) {
+  document.querySelectorAll('#formSelecionarLojas input[type="checkbox"]').forEach(cb => {
+    cb.checked = marcar;
+    destacarLinha(cb.value);
+  });
+}
+
+function destacarLinha(lojaId) {
+  const linha = document.getElementById("linha_loja_" + lojaId);
+  const checkbox = document.getElementById("loja_" + lojaId);
+  if (linha && checkbox) {
+    if (checkbox.checked) {
+      linha.classList.add("table-success");
+    } else {
+      linha.classList.remove("table-success");
+    }
+  }
+}
+</script>
+{% endblock %}

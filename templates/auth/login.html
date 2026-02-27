@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block titulo %}Login{% endblock %}
+
+{% block conteudo %}
+<div class="container d-flex justify-content-center align-items-center" style="min-height: 80vh;">
+  <div class="card shadow-sm p-4 rounded-3" style="max-width: 420px; width: 100%;">
+    <div class="card-body">
+      <h3 class="card-title text-center mb-4 text-primary">
+        <i class="bi bi-box-arrow-in-right"></i> Acesso ao Sistema
+      </h3>
+
+      {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+          {% for categoria, msg in mensagens %}
+            <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+              {{ msg }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <form method="post">
+        <div class="mb-3">
+          <label for="username" class="form-label fw-semibold">Usuário</label>
+          <input type="text" name="username" id="username" class="form-control" required autofocus autocomplete="username">
+        </div>
+        <div class="mb-3">
+          <label for="senha" class="form-label fw-semibold">Senha</label>
+          <input type="password" name="senha" id="senha" class="form-control" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn btn-primary w-100 fw-semibold">
+          Entrar
+        </button>
+      </form>
+
+      <div class="text-center mt-3">
+        <small><a href="{{ url_for('auth.forgot_password') }}" class="text-decoration-none">Esqueceu sua senha?</a></small>
+      </div>
+
+      <div class="text-center mt-2">
+        <small>Não tem conta? <a href="{{ url_for('auth.register') }}" class="text-decoration-none">Cadastre-se</a></small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,143 @@
+/* =========================
+   MODO DIA
+   ========================= */
+.apresentacao {
+  position: relative;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0d6efd, #87ceeb); /* azul claro premium */
+  overflow: hidden;
+}
+
+/* Ondas animadas (dia) */
+.apresentacao::before,
+.apresentacao::after {
+  content: "";
+  position: absolute;
+  width: 200%;
+  height: 180px;
+  left: -50%;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 100%;
+  animation: ondas 18s linear infinite;
+}
+
+.apresentacao::after {
+  top: 140px;
+  animation-duration: 24s; /* suavização */
+  opacity: 0.35;
+}
+
+@keyframes ondas {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
+
+/* =========================
+   MODO NOITE
+   ========================= */
+.apresentacao.noite {
+  background: linear-gradient(135deg, #000428, #004e92); /* azul escuro elegante */
+}
+
+.apresentacao.noite::before,
+.apresentacao.noite::after {
+  display: none; /* remove ondas no modo noite */
+}
+
+/* =========================
+   ESTRELAS PISCANDO
+   ========================= */
+.estrelas {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: transparent;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.estrelas span {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: white;
+  border-radius: 50%;
+  animation: piscar 2.5s infinite alternate;
+  opacity: 0.7;
+}
+
+.estrelas span:nth-child(odd) {
+  animation-delay: 1s;
+}
+.estrelas span:nth-child(3n) {
+  animation-delay: 0.5s;
+}
+
+@keyframes piscar {
+  from { opacity: 0.2; }
+  to   { opacity: 1; }
+}
+
+/* =========================
+   PAPAGAIO VOANDO NA LATERAL DIREITA
+   ========================= */
+.papagaio-lateral {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  max-width: 110px;      /* tamanho discreto */
+  z-index: 999;
+  animation: voar-diagonal 5s ease-in-out infinite,
+             balancar 6s ease-in-out infinite;
+  filter: drop-shadow(0 3px 6px rgba(0,0,0,0.25));
+  transition: transform 0.3s ease;
+  pointer-events: none;
+}
+
+/* Glow leve ao passar o mouse */
+.papagaio-lateral:hover {
+  transform: scale(1.05) rotate(2deg);
+  filter: drop-shadow(0 5px 10px rgba(0,0,0,0.35));
+}
+
+/* =========================
+   ANIMAÇÕES
+   ========================= */
+@keyframes voar-diagonal {
+  0%   { transform: translate(0, -50%); }
+  25%  { transform: translate(8px, -58%); }
+  50%  { transform: translate(12px, -62%); }
+  75%  { transform: translate(8px, -58%); }
+  100% { transform: translate(0, -50%); }
+}
+
+@keyframes balancar {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(0.8deg); }
+  50%  { transform: rotate(0deg); }
+  75%  { transform: rotate(-0.8deg); }
+  100% { transform: rotate(0deg); }
+}
+
+
+/* =========================
+   QUADRADINHOS DE DATAS
+   ========================= */
+.quadradinho {
+  display: inline-block;
+  padding: 8px 14px;
+  margin: 4px;
+  background-color: #e9ecef;   /* cinza claro */
+  border-radius: 6px;
+  font-weight: bold;
+  color: #212529;              /* texto escuro */
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.quadradinho:hover {
+  background-color: #ced4da;   /* cinza mais escuro ao passar o mouse */
+  transform: scale(1.05);
+  cursor: pointer;
+}

@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block titulo %}Editar Lote{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2 class="mb-4">Editar Lote</h2>
+
+  <!-- Mensagens de feedback -->
+  {% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+      {% for categoria, msg in mensagens %}
+        <div class="alert alert-{{ 'success' if categoria == 'sucesso' else 'danger' }} alert-dismissible fade show" role="alert">
+          {{ msg }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Formulário de edição -->
+  <form method="post" class="card shadow-sm p-4">
+    <div class="mb-3">
+      <label for="departamento" class="form-label">Departamento</label>
+      <input type="text" name="departamento" id="departamento" class="form-control" 
+             value="{{ lote.departamento }}" required>
+    </div>
+    <div class="mb-3">
+      <label for="secao" class="form-label">Seção</label>
+      <input type="text" name="secao" id="secao" class="form-control" 
+             value="{{ lote.secao }}" required>
+    </div>
+    <div class="mb-3">
+      <label for="status" class="form-label">Status</label>
+      <select name="status" id="status" class="form-select">
+        <option value="ativo" {% if lote.status == 'ativo' %}selected{% endif %}>Ativo</option>
+        <option value="inativo" {% if lote.status == 'inativo' %}selected{% endif %}>Inativo</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-pencil-square"></i> Atualizar
+    </button>
+    <a href="{{ url_for('lotes.lotes') }}" class="btn btn-secondary">
+      <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+  </form>
+</div>
+{% endblock %}

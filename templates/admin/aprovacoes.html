@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block titulo %}Aprovação de Usuários{% endblock %}
+
+{% block conteudo %}
+<div class="container py-4">
+  <h2>👥 Aprovação de Usuários</h2>
+
+  {% if usuarios %}
+    <table class="table table-striped table-hover mt-3">
+      <thead class="table-dark">
+        <tr>
+          <th>ID</th>
+          <th>Nome Completo</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Loja</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in usuarios %}
+          <tr>
+            <td>{{ u.id }}</td>
+            <td>{{ u.nome_completo }}</td>
+            <td>{{ u.username }}</td>
+            <td>{{ u.email }}</td>
+            <td>{{ u.loja_id or "—" }}</td>
+            <td>
+              {% if u.status == "aprovado" %}
+                <span class="badge bg-success">Aprovado</span>
+              {% elif u.status == "pendente" %}
+                <span class="badge bg-warning text-dark">Pendente</span>
+              {% elif u.status == "rejeitado" %}
+                <span class="badge bg-danger">Rejeitado</span>
+              {% else %}
+                <span class="badge bg-secondary">Desconhecido</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.status == "pendente" %}
+                <form method="post" action="{{ url_for('admin.aprovar', user_id=u.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-success btn-sm">✅ Aprovar</button>
+                </form>
+                <form method="post" action="{{ url_for('admin.rejeitar', user_id=u.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-danger btn-sm">❌ Rejeitar</button>
+                </form>
+              {% elif u.status == "aprovado" %}
+                <form method="post" action="{{ url_for('admin.rejeitar', user_id=u.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-danger btn-sm">❌ Rejeitar</button>
+                </form>
+              {% elif u.status == "rejeitado" %}
+                <form method="post" action="{{ url_for('admin.aprovar', user_id=u.id) }}" style="display:inline;">
+                  <button type="submit" class="btn btn-success btn-sm">✅ Reaprovar</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="alert alert-info mt-3">
+      Nenhum usuário encontrado.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
