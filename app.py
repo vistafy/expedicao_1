@@ -186,13 +186,15 @@ def index():
 def teardown_db(exception):
     close_db()
 
-# 📌 Configuração do Flask-Mail
+# 📌 Configuração segura usando variáveis de ambiente
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "chave_local_teste")
+
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.environ.get("MAIL_USERNAME", "vistafy.mr@gmail.com")
-app.config['MAIL_PASSWORD'] = os.environ.get("MAIL_PASSWORD", "vmsz evxi ujtp bdts")
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_DEFAULT_SENDER", "vistafy.mr@gmail.com")
+app.config['MAIL_USERNAME'] = os.environ.get("MAIL_USERNAME")
+app.config['MAIL_PASSWORD'] = os.environ.get("MAIL_PASSWORD")
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_DEFAULT_SENDER")
 
 mail = Mail(app)
 

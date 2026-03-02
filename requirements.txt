@@ -9,4 +9,4 @@ itsdangerous==2.2.0
 MarkupSafe==3.0.3
 gunicorn
 waitress
-pandas==2.2.1
+pandas==2.2.2
