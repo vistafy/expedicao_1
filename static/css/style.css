@@ -141,3 +141,27 @@
   transform: scale(1.05);
   cursor: pointer;
 }
+
+.top10-card {
+  overflow-x: auto;       /* permite rolagem horizontal */
+  white-space: nowrap;    /* impede quebra de linha */
+  margin-bottom: 20px;
+}
+
+.top10-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.top10-table th, .top10-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  white-space: nowrap;    /* impede quebra de linha nas células */
+}
+
+.top10-table .descricao {
+  max-width: 250px;       /* controla largura da descrição */
+  overflow: hidden;
+  text-overflow: ellipsis; /* adiciona "..." se o texto for muito longo */
+}

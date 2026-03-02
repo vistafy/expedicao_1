@@ -218,19 +218,4 @@ if __name__ == "__main__":
                 print(f"\n{arquivo.name} | ❌ Tabela não encontrada")
     else:
         print("⚠️ Nenhum arquivo relatorio_analitico_de_trocas.csv encontrado")
-        
-if __name__ == "__main__":
-    arquivos = localizar_avarias_csv()
-    if arquivos:
-        for arquivo in arquivos:
-            tabela = montar_tabela_avarias(arquivo)
-            if not tabela.empty:
-                print(f"\n{arquivo.name} | Registros: {len(tabela)}")
-                print(tabela.head(7))
-                verificar_totais_dataframe(tabela)
-                salvar_tabela_avarias(tabela)
-                verificar_totais_banco()
-            else:
-                print(f"\n{arquivo.name} | ❌ Tabela não encontrada")
-    else:
-        print("⚠️ Nenhum arquivo relatorio_analitico_de_trocas.csv encontrado na pasta Downloads.")
+  

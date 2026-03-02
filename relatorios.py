@@ -4,6 +4,7 @@ from pathlib import Path
 import warnings
 import unicodedata
 import sqlite3
+from datetime import datetime
 
 warnings.simplefilter("ignore")
 
@@ -16,6 +17,13 @@ def normalizar(texto):
     texto = texto.strip().lower()
     texto = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("utf-8")
     return texto
+
+def normalizar_data(data_str):
+    """Converte datas para formato YYYY-MM-DD"""
+    try:
+        return datetime.strptime(data_str, "%d/%m/%Y").strftime("%Y-%m-%d")
+    except:
+        return data_str
 
 def get_downloads_folder():
     """Retorna a pasta Downloads do usuário."""
@@ -56,7 +64,7 @@ def montar_tabela(arquivo, periodo):
                 encontrados = sum(1 for e in esperado if any(e in c for c in colunas))
                 if encontrados >= len(esperado) // 2:
                     df_correto = pd.read_excel(arquivo, sheet_name=sheet, header=i)
-                    df_correto.insert(0, "Data", periodo)
+                    df_correto.insert(0, "Data", normalizar_data(periodo))  # <-- normaliza aqui
 
                     # Conversão de colunas numéricas
                     for col in ["Código Interno"]:
@@ -132,7 +140,7 @@ def salvar_tabela(df):
         loja_id = get_or_create_loja_id(cursor, loja_codigo)
 
         valores = [
-            row.get("Data"),
+            normalizar_data(row.get("Data")),  # <-- normaliza aqui também
             loja_id,
             str(row.get("Departamento")) if pd.notna(row.get("Departamento")) else "DESCONHECIDO",
             str(row.get("Seção")) if pd.notna(row.get("Seção")) else "DESCONHECIDO",
