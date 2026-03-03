@@ -27,7 +27,7 @@ app = Flask(
     instance_path=str(base_dir() / "instance")
 )
 
-app.config['SECRET_KEY'] = 'sua_chave_secreta_aqui'
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "chave_local_teste")
 app.config['DATABASE'] = os.path.join(app.instance_path, 'expedicao_1.db')
 
 os.makedirs(app.instance_path, exist_ok=True)
@@ -187,8 +187,6 @@ def teardown_db(exception):
     close_db()
 
 # 📌 Configuração segura usando variáveis de ambiente
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "chave_local_teste")
-
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
@@ -198,12 +196,15 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_DEFAULT_SENDER")
 
 mail = Mail(app)
 
+# 📌 Inicializar banco sempre que o app subir (inclusive no Render/Gunicorn)
+with app.app_context():
+    init_db()
+    criar_admin()
+    importar_produtos()
+
 if __name__ == "__main__":
     with app.app_context():
-        init_db()
-        criar_admin()
-        importar_produtos()
-
+        # Relatórios e avarias só localmente (evita erro no Render por falta de CSVs)
         relatorios = localizar_relatorios_padrao()
         if relatorios:
             for arquivo in relatorios:
