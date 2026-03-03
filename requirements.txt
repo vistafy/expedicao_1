@@ -10,3 +10,4 @@ MarkupSafe==3.0.3
 gunicorn
 waitress
 pandas==2.2.2
+XlsxWriter==3.2.0
