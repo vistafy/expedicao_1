@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template
 from flask_login import login_required
-from db import get_db
+from db import get_cursor
+from datetime import datetime
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
 
@@ -10,36 +11,34 @@ def format_brl(valor):
 @dashboard_bp.route("/", methods=["GET"])
 @login_required
 def index():
-    conn = get_db()
+    cur = get_cursor()
 
     # Lotes ativos
-    lotes_ativos = conn.execute(
-        "SELECT COUNT(*) AS total FROM lotes WHERE status = 'ativo'"
-    ).fetchone()["total"]
+    cur.execute("SELECT COUNT(*) AS total FROM lotes WHERE status = 'ativo'")
+    lotes_ativos = cur.fetchone()["total"]
 
     # Total de registros
-    total_registros = conn.execute(
-        "SELECT COUNT(*) AS total FROM registros"
-    ).fetchone()["total"]
+    cur.execute("SELECT COUNT(*) AS total FROM registros")
+    total_registros = cur.fetchone()["total"]
 
     # Pesos por loja
-    pesos_por_loja = conn.execute("""
+    cur.execute("""
         SELECT l.nome, SUM(r.peso_liquido_kg) AS total_peso
         FROM registros r
         JOIN lojas l ON r.loja_id = l.id
         GROUP BY l.nome
         ORDER BY total_peso DESC
-    """).fetchall()
+    """)
+    pesos_por_loja = cur.fetchall()
 
     # --- Avarias (mês atual) ---
-    total_avarias = conn.execute(
-        """
-        SELECT SUM(valor) AS total
+    cur.execute("""
+        SELECT COALESCE(SUM(valor), 0) AS total
         FROM avarias
-        WHERE strftime('%m', data) = strftime('%m', 'now')
-          AND strftime('%Y', data) = strftime('%Y', 'now')
-        """
-    ).fetchone()["total"] or 0
+        WHERE EXTRACT(MONTH FROM data) = EXTRACT(MONTH FROM CURRENT_DATE)
+          AND EXTRACT(YEAR FROM data) = EXTRACT(YEAR FROM CURRENT_DATE)
+    """)
+    total_avarias = cur.fetchone()["total"]
 
     return render_template(
         "dashboard.html",

@@ -8,19 +8,24 @@ class Usuario(UserMixin):
         email: str,
         senha: str,
         role: str,
-        loja_id: int = None,     # corresponde ao campo da tabela
-        criado_em: str = None
+        loja_id: int = None,
+        criado_em: str = None,
+        status: str = "pendente"   # <-- novo campo
     ):
         self.id = id
         self.username = username
         self.email = email
         self.senha = senha
         self.role = role
-        self.loja_id = loja_id   # agora corresponde ao banco
+        self.loja_id = loja_id
         self.criado_em = criado_em
+        self.status = status       # <-- armazenado no objeto
 
     def __repr__(self) -> str:
-        return f"<Usuario id={self.id} username={self.username} role={self.role} loja_id={self.loja_id}>"
+        return (
+            f"<Usuario id={self.id} username={self.username} role={self.role} "
+            f"loja_id={self.loja_id} status={self.status}>"
+        )
 
     def get_id(self) -> str:
         return str(self.id)

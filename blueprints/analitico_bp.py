@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
-from db import get_db
+from db import get_cursor, get_db
+
 
 analitico_bp = Blueprint("analitico", __name__, url_prefix="/analitico")
 
@@ -17,15 +18,19 @@ def analitico():
 
     # Se for admin → todas as lojas
     if current_user.role == "admin":
-        lojas = conn.execute("SELECT id, nome FROM lojas ORDER BY nome").fetchall()
+        cur = get_cursor()
+        cur.execute("SELECT id, nome FROM lojas ORDER BY nome")
+        lojas = cur.fetchall()
+
         loja_id = request.args.get("loja")
         if not loja_id and lojas:
             loja_id = str(lojas[0]["id"])
     else:
         loja_id = str(current_user.loja_id)
-        lojas = conn.execute(
-            "SELECT id, nome FROM lojas WHERE id = ?", (loja_id,)
-        ).fetchall()
+        cur = get_cursor()
+        cur.execute("SELECT id, nome FROM lojas WHERE id = %s", (loja_id,))
+        lojas = cur.fetchall()
+
 
     resumo = {}
     projecao = {}
@@ -44,64 +49,85 @@ def analitico():
         try:
             mes, ano = mes_ano.split("/")
         except Exception:
-            mes = conn.execute("SELECT strftime('%m','now')").fetchone()[0]
-            ano = conn.execute("SELECT strftime('%Y','now')").fetchone()[0]
+            cur = get_cursor()
+            cur.execute("SELECT EXTRACT(MONTH FROM CURRENT_DATE) AS mes")
+            mes = str(int(cur.fetchone()["mes"]))
+            cur.execute("SELECT EXTRACT(YEAR FROM CURRENT_DATE) AS ano")
+            ano = str(int(cur.fetchone()["ano"]))
     else:
-        mes = conn.execute("SELECT strftime('%m','now')").fetchone()[0]
-        ano = conn.execute("SELECT strftime('%Y','now')").fetchone()[0]
+        cur = get_cursor()
+        cur.execute("SELECT EXTRACT(MONTH FROM CURRENT_DATE) AS mes")
+        mes = str(int(cur.fetchone()["mes"]))
+        cur.execute("SELECT EXTRACT(YEAR FROM CURRENT_DATE) AS ano")
+        ano = str(int(cur.fetchone()["ano"]))
 
     if loja_id:
         # Buscar nome da loja
-        loja_row = conn.execute("SELECT nome FROM lojas WHERE id = ?", (loja_id,)).fetchone()
+        cur.execute("SELECT nome FROM lojas WHERE id = %s", (loja_id,))
+        loja_row = cur.fetchone()
         if loja_row:
             loja_nome = loja_row["nome"]
 
-        # Buscar departamentos e seções
-        departamentos = conn.execute(
-            "SELECT DISTINCT departamento FROM vendas WHERE loja_id = ? ORDER BY departamento",
+        # Buscar departamentos
+        cur.execute(
+            "SELECT DISTINCT departamento FROM vendas WHERE loja_id = %s ORDER BY departamento",
             (loja_id,)
-        ).fetchall()
+        )
+        departamentos = cur.fetchall()
+
         if departamento_sel:
-            secoes = conn.execute(
-                "SELECT DISTINCT secao FROM vendas WHERE loja_id = ? AND departamento = ? ORDER BY secao",
+            cur.execute(
+                "SELECT DISTINCT secao FROM vendas WHERE loja_id = %s AND departamento = %s ORDER BY secao",
                 (loja_id, departamento_sel)
-            ).fetchall()
+            )
+            secoes = cur.fetchall()
 
         # --- Vendas ---
         query_vendas = """
             SELECT COALESCE(SUM(venda),0)
             FROM vendas
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
+
         params = [loja_id, ano, mes, ano, mes]
         if departamento_sel:
-            query_vendas += " AND departamento = ?"
+            query_vendas += " AND departamento = %s"
             params.append(departamento_sel)
         if secao_sel:
-            query_vendas += " AND secao = ?"
+            query_vendas += " AND secao = %s"
             params.append(secao_sel)
 
-        total_vendas = conn.execute(query_vendas, tuple(params)).fetchone()[0]
+        cur = get_cursor()
+        cur.execute(query_vendas, tuple(params))
+        total_vendas = cur.fetchone()[0] or 0
         resumo["vendas"] = format_brl(total_vendas)
 
-        dias_vendidos = conn.execute(
+        # Dias vendidos
+        cur.execute(
             """
-            SELECT COUNT(DISTINCT date(data))
+            SELECT COUNT(DISTINCT DATE(data)) AS dias
             FROM vendas
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
             """,
             (loja_id, ano, mes, ano, mes)
-        ).fetchone()[0] or 1
+        )
+        dias_vendidos = cur.fetchone()["dias"] or 1
 
-        dias_total_mes = int(conn.execute(
-            "SELECT strftime('%d', date(? || '-' || ? || '-01','+1 month','-1 day'))",
+        # Dias totais do mês
+        cur.execute(
+            """
+            SELECT EXTRACT(DAY FROM (make_date(%s::int, %s::int, 1) 
+                                    + INTERVAL '1 month - 1 day')) AS total_dias
+            """,
             (ano, mes)
-        ).fetchone()[0])
+        )
+        dias_total_mes = int(cur.fetchone()["total_dias"])
 
+        # Média e projeção
         media_diaria = total_vendas / dias_vendidos if dias_vendidos else 0
         projecao["vendas"] = format_brl(media_diaria * dias_total_mes)
 
@@ -109,48 +135,58 @@ def analitico():
         query_avarias = """
             SELECT COALESCE(SUM(valor),0)
             FROM avarias
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
+
         params_avarias = [loja_id, ano, mes, ano, mes]
         if departamento_sel:
-            query_avarias += " AND departamento = ?"
+            query_avarias += " AND departamento = %s"
             params_avarias.append(departamento_sel)
         if secao_sel:
-            query_avarias += " AND secao = ?"
+            query_avarias += " AND secao = %s"
             params_avarias.append(secao_sel)
         if gtin_sel:
-            query_avarias += " AND gtin = ?"
+            query_avarias += " AND gtin = %s"
             params_avarias.append(gtin_sel)
         if codigo_sel:
-            query_avarias += " AND codigo = ?"
+            query_avarias += " AND codigo = %s"
             params_avarias.append(codigo_sel)
 
-        total_avarias = conn.execute(query_avarias, tuple(params_avarias)).fetchone()[0]
+        cur.execute(query_avarias, tuple(params_avarias))
+        total_avarias = cur.fetchone()[0] or 0
         resumo["avarias"] = format_brl(total_avarias)
 
-        dias_avarias = conn.execute(
+        # Dias com avarias
+        cur.execute(
             """
-            SELECT COUNT(DISTINCT date(data))
+            SELECT COUNT(DISTINCT DATE(data)) AS dias
             FROM avarias
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
             """,
             (loja_id, ano, mes, ano, mes)
-        ).fetchone()[0] or 1
+        )
+        dias_avarias = cur.fetchone()["dias"] or 1
 
+        # Média e projeção
         media_diaria_avarias = total_avarias / dias_avarias if dias_avarias else 0
         projecao["avarias"] = format_brl(media_diaria_avarias * dias_total_mes)
-
+        
+        
         # --- Inventário (acumulado geral) ---
         query_inventario = """
             SELECT COALESCE(SUM(valor_total),0)
             FROM inventario_rotativo
-            WHERE loja_id = ?
+            WHERE loja_id = %s
         """
-        total_inventario = conn.execute(query_inventario, (loja_id,)).fetchone()[0]
+        cur = get_cursor()
+
+        # Inventário
+        cur.execute(query_inventario, (loja_id,))
+        total_inventario = cur.fetchone()[0] or 0
         resumo["inventario"] = format_brl(total_inventario)
         projecao["inventario"] = "R$ 0,00"
 
@@ -158,56 +194,66 @@ def analitico():
         query_rotativos = """
             SELECT COALESCE(SUM(valor_total),0)
             FROM rotativos
-            WHERE loja_id = ?
+            WHERE loja_id = %s
         """
-        total_rotativos = conn.execute(query_rotativos, (loja_id,)).fetchone()[0]
+        cur.execute(query_rotativos, (loja_id,))
+        total_rotativos = cur.fetchone()[0] or 0
         resumo["rotativos"] = format_brl(total_rotativos)
         projecao["rotativos"] = "R$ 0,00"
 
         # --- Datas distintas para quadradinhos ---
-        datas_inventario = [row[0] for row in conn.execute(
+        cur.execute(
             """
-            SELECT DISTINCT date(data)
+            SELECT DISTINCT DATE(data) AS data
             FROM inventario_rotativo
-            WHERE loja_id = ?
-            ORDER BY date(data)
+            WHERE loja_id = %s
+            ORDER BY DATE(data)
             LIMIT 4
             """,
             (loja_id,)
-        ).fetchall()]
+        )
+        datas_inventario = [row["data"] for row in cur.fetchall()]
 
-        datas_rotativos = [row[0] for row in conn.execute(
+        cur.execute(
             """
-            SELECT DISTINCT date(data)
+            SELECT DISTINCT DATE(data) AS data
             FROM rotativos
-            WHERE loja_id = ?
-            ORDER BY date(data)
+            WHERE loja_id = %s
+            ORDER BY DATE(data)
             LIMIT 4
             """,
             (loja_id,)
-        ).fetchall()]
+        )
+        datas_rotativos = [row["data"] for row in cur.fetchall()]
+
+
 
         # --- Top 10 Vendas ---
         query_top_vendas = """
             SELECT codigo_interno AS codigo, produto AS descricao,
-                   SUM(qtd_vendida) AS quantidade, SUM(venda) AS venda
+                SUM(qtd_vendida) AS quantidade, SUM(venda) AS venda
             FROM vendas
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
         params_top_vendas = [loja_id, ano, mes, ano, mes]
+
         if departamento_sel:
-            query_top_vendas += " AND departamento = ?"
+            query_top_vendas += " AND departamento = %s"
             params_top_vendas.append(departamento_sel)
         if secao_sel:
-            query_top_vendas += " AND secao = ?"
+            query_top_vendas += " AND secao = %s"
             params_top_vendas.append(secao_sel)
+
         query_top_vendas += """
             GROUP BY codigo_interno, produto
             ORDER BY venda DESC
             LIMIT 10
         """
+
+        cur = get_cursor()
+        cur.execute(query_top_vendas, tuple(params_top_vendas))
         top10_vendidos = [
             {
                 "codigo": row["codigo"],
@@ -215,30 +261,36 @@ def analitico():
                 "quantidade": format_kg(row["quantidade"]),
                 "venda": format_brl(row["venda"])
             }
-            for row in conn.execute(query_top_vendas, tuple(params_top_vendas)).fetchall()
+            for row in cur.fetchall()
         ]
-        
-                # --- Top 10 Avarias ---
+
+
+        # --- Top 10 Avarias ---
         query_top_avarias = """
             SELECT codigo, descricao,
-                   SUM(quantidade) AS quantidade, SUM(valor) AS valor
+                SUM(quantidade) AS quantidade, SUM(valor) AS valor
             FROM avarias
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
         params_top_avarias = [loja_id, ano, mes, ano, mes]
+
         if departamento_sel:
-            query_top_avarias += " AND departamento = ?"
+            query_top_avarias += " AND departamento = %s"
             params_top_avarias.append(departamento_sel)
         if secao_sel:
-            query_top_avarias += " AND secao = ?"
+            query_top_avarias += " AND secao = %s"
             params_top_avarias.append(secao_sel)
+
         query_top_avarias += """
             GROUP BY codigo, descricao
             ORDER BY valor ASC   -- mostra os mais negativos primeiro
             LIMIT 10
         """
+
+        cur = get_cursor()
+        cur.execute(query_top_avarias, tuple(params_top_avarias))
         top10_avarias = [
             {
                 "codigo": row["codigo"],
@@ -246,30 +298,35 @@ def analitico():
                 "quantidade": format_kg(row["quantidade"]),
                 "valor": format_brl(row["valor"])
             }
-            for row in conn.execute(query_top_avarias, tuple(params_top_avarias)).fetchall()
+            for row in cur.fetchall()
         ]
 
         # --- Top 10 Inventário ---
         query_top_inventario = """
-            SELECT date(data) AS data, codigo_produto AS codigo, produto AS descricao,
-                   SUM(quantidade) AS quantidade, SUM(valor_total) AS valor
+            SELECT DATE(data) AS data, codigo_produto AS codigo, produto AS descricao,
+                SUM(quantidade) AS quantidade, SUM(valor_total) AS valor
             FROM inventario_rotativo
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
         params_top_inventario = [loja_id, ano, mes, ano, mes]
+
         if departamento_sel:
-            query_top_inventario += " AND departamento = ?"
+            query_top_inventario += " AND departamento = %s"
             params_top_inventario.append(departamento_sel)
         if secao_sel:
-            query_top_inventario += " AND secao = ?"
+            query_top_inventario += " AND secao = %s"
             params_top_inventario.append(secao_sel)
+
         query_top_inventario += """
-            GROUP BY date(data), codigo_produto, produto
+            GROUP BY DATE(data), codigo_produto, produto
             ORDER BY valor ASC   -- mostra os mais negativos primeiro
             LIMIT 10
         """
+
+        cur = get_cursor()
+        cur.execute(query_top_inventario, tuple(params_top_inventario))
         top10_inventario = [
             {
                 "data": row["data"],
@@ -278,30 +335,36 @@ def analitico():
                 "quantidade": format_kg(row["quantidade"]),
                 "valor": format_brl(row["valor"])
             }
-            for row in conn.execute(query_top_inventario, tuple(params_top_inventario)).fetchall()
+            for row in cur.fetchall()
         ]
+
 
         # --- Top 10 Rotativos ---
         query_top_rotativos = """
-            SELECT date(data) AS data, codigo_produto AS codigo, produto AS descricao,
-                   SUM(quantidade) AS quantidade, SUM(valor_total) AS valor
+            SELECT DATE(data) AS data, codigo_produto AS codigo, produto AS descricao,
+                SUM(quantidade) AS quantidade, SUM(valor_total) AS valor
             FROM rotativos
-            WHERE loja_id = ?
-              AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                                 AND date(? || '-' || ? || '-01','+1 month','-1 day')
+            WHERE loja_id = %s
+            AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                                AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
         """
         params_top_rotativos = [loja_id, ano, mes, ano, mes]
+
         if departamento_sel:
-            query_top_rotativos += " AND departamento = ?"
+            query_top_rotativos += " AND departamento = %s"
             params_top_rotativos.append(departamento_sel)
         if secao_sel:
-            query_top_rotativos += " AND secao = ?"
+            query_top_rotativos += " AND secao = %s"
             params_top_rotativos.append(secao_sel)
+
         query_top_rotativos += """
-            GROUP BY date(data), codigo_produto, produto
+            GROUP BY DATE(data), codigo_produto, produto
             ORDER BY valor ASC   -- mostra os mais negativos primeiro
             LIMIT 10
         """
+
+        cur = get_cursor()
+        cur.execute(query_top_rotativos, tuple(params_top_rotativos))
         top10_rotativos = [
             {
                 "data": row["data"],
@@ -310,7 +373,7 @@ def analitico():
                 "quantidade": format_kg(row["quantidade"]),
                 "valor": format_brl(row["valor"])
             }
-            for row in conn.execute(query_top_rotativos, tuple(params_top_rotativos)).fetchall()
+            for row in cur.fetchall()
         ]
 
         return render_template(
@@ -339,20 +402,22 @@ def analitico():
 
 
 # Função auxiliar para calcular totais
-def calcular_total(conn, base_query, params, filtros):
+def calcular_total(base_query, params, filtros):
     query = base_query
     for campo, valor in filtros.items():
         if valor and valor != "None":
-            query += f" AND {campo} = ?"
+            query += f" AND {campo} = %s"
             params.append(valor)
-    return conn.execute(query, tuple(params)).fetchone()[0] or 0
+
+    cur = get_cursor()
+    cur.execute(query, tuple(params))
+    return cur.fetchone()[0] or 0
 
 
 # --- Rota AJAX para Inventário e Rotativos ---
 @analitico_bp.route("/valor", methods=["GET"])
 @login_required
 def valor_por_data():
-    conn = get_db()
     loja_id = request.args.get("loja")
     tipo = request.args.get("tipo")  # inventario ou rotativos
     data_sel = request.args.get("data")
@@ -368,21 +433,21 @@ def valor_por_data():
         base_query = """
             SELECT COALESCE(SUM(valor_total),0)
             FROM inventario_rotativo
-            WHERE loja_id = ?
-              AND date(data) = date(?)
+            WHERE loja_id = %s
+              AND DATE(data) = %s::date
         """
     elif tipo == "rotativos":
         base_query = """
             SELECT COALESCE(SUM(valor_total),0)
             FROM rotativos
-            WHERE loja_id = ?
-              AND date(data) = date(?)
+            WHERE loja_id = %s
+              AND DATE(data) = %s::date
         """
     else:
         return jsonify({"valor": "R$ 0,00"})
 
     params = [loja_id, data_sel]
-    total = calcular_total(conn, base_query, params, filtros)
+    total = calcular_total(base_query, params, filtros)
     return jsonify({"valor": format_brl(total)})
 
 
@@ -390,7 +455,6 @@ def valor_por_data():
 @analitico_bp.route("/vendas_valor", methods=["GET"])
 @login_required
 def vendas_valor():
-    conn = get_db()
     loja_id = request.args.get("loja")
     mes_ano = request.args.get("mes_ano")  # formato MM/YYYY
 
@@ -409,12 +473,12 @@ def vendas_valor():
     base_query = """
         SELECT COALESCE(SUM(venda),0)
         FROM vendas
-        WHERE loja_id = ?
-          AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                             AND date(? || '-' || ? || '-01','+1 month','-1 day')
+        WHERE loja_id = %s
+          AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                             AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
     """
     params = [loja_id, ano, mes, ano, mes]
-    total = calcular_total(conn, base_query, params, filtros)
+    total = calcular_total(base_query, params, filtros)
     return jsonify({"valor": format_brl(total)})
 
 
@@ -422,7 +486,6 @@ def vendas_valor():
 @analitico_bp.route("/avarias_valor", methods=["GET"])
 @login_required
 def avarias_valor():
-    conn = get_db()
     loja_id = request.args.get("loja")
     mes_ano = request.args.get("mes_ano")  # formato MM/YYYY
 
@@ -441,10 +504,10 @@ def avarias_valor():
     base_query = """
         SELECT COALESCE(SUM(valor),0)
         FROM avarias
-        WHERE loja_id = ?
-          AND date(data) BETWEEN date(? || '-' || ? || '-01')
-                             AND date(? || '-' || ? || '-01','+1 month','-1 day')
+        WHERE loja_id = %s
+          AND DATE(data) BETWEEN make_date(%s::int, %s::int, 1)
+                             AND (make_date(%s::int, %s::int, 1) + INTERVAL '1 month - 1 day')
     """
     params = [loja_id, ano, mes, ano, mes]
-    total = calcular_total(conn, base_query, params, filtros)
+    total = calcular_total(base_query, params, filtros)
     return jsonify({"valor": format_brl(total)})

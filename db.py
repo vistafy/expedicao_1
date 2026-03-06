@@ -1,38 +1,44 @@
-import sqlite3
-from flask import current_app, g
-from datetime import datetime
+import psycopg2
+import psycopg2.extras
+from flask import g
 
-# 🔧 Adaptadores e conversores para TIMESTAMP
-def adapt_datetime(ts):
-    return ts.isoformat(" ")
-
-def convert_datetime(s):
-    try:
-        return datetime.fromisoformat(s.decode())
-    except Exception:
-        return s
-
-sqlite3.register_adapter(datetime, adapt_datetime)
-sqlite3.register_converter("timestamp", convert_datetime)
+# 🔧 Configuração da conexão PostgreSQL
+PG_CONN = {
+    "dbname": "expedicao_1",
+    "user": "postgres",
+    "password": "rc04202894",  # troque pela sua senha real
+    "host": "localhost",
+    "port": "5432"
+}
 
 def get_db():
     """
-    Abre uma conexão com o banco de dados SQLite e armazena em `g` (contexto da requisição).
+    Abre uma conexão com o banco de dados PostgreSQL e armazena em `g` (contexto da requisição).
     Se já existir uma conexão aberta, reutiliza.
     """
     if "db" not in g:
-        g.db = sqlite3.connect(
-            current_app.config["DATABASE"],
-            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES
-        )
-        g.db.row_factory = sqlite3.Row
+        g.db = psycopg2.connect(**PG_CONN)
+        # Cursor que retorna resultados como dicionário (similar ao sqlite3.Row)
+        g.cur = g.db.cursor(cursor_factory=psycopg2.extras.DictCursor)
     return g.db
+
+def get_cursor():
+    """
+    Retorna o cursor associado à conexão atual.
+    """
+    if "cur" not in g:
+        get_db()  # garante que a conexão está aberta
+    return g.cur
 
 def close_db(e=None):
     """
     Fecha a conexão com o banco ao final da requisição.
     É chamado automaticamente pelo `app.teardown_appcontext`.
     """
+    cur = g.pop("cur", None)
+    if cur is not None:
+        cur.close()
+
     db = g.pop("db", None)
     if db is not None:
         db.close()

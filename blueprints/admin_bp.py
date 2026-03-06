@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from functools import wraps
 from db import get_db
+from decorators import admin_required
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -71,14 +72,19 @@ def aprovacoes():
     ).fetchall()
     return render_template("admin/aprovacoes.html", usuarios=usuarios_pendentes)
 
+from db import get_cursor, get_db
+from flask import redirect, url_for, flash
+from flask_login import login_required
+from decorators import admin_required
+
 # 📌 Aprovar usuário
 @admin_bp.route("/aprovacoes/aprovar/<int:user_id>", methods=["POST"])
 @login_required
 @admin_required
 def aprovar(user_id):
-    conn = get_db()
-    conn.execute("UPDATE usuarios SET status = 'aprovado' WHERE id = ?", (user_id,))
-    conn.commit()
+    cur = get_cursor()
+    cur.execute("UPDATE usuarios SET status = 'aprovado' WHERE id = %s", (user_id,))
+    get_db().commit()
     flash("✅ Usuário aprovado com sucesso!", "sucesso")
     return redirect(url_for("admin.aprovacoes"))
 
@@ -87,8 +93,8 @@ def aprovar(user_id):
 @login_required
 @admin_required
 def rejeitar(user_id):
-    conn = get_db()
-    conn.execute("UPDATE usuarios SET status = 'rejeitado' WHERE id = ?", (user_id,))
-    conn.commit()
+    cur = get_cursor()
+    cur.execute("UPDATE usuarios SET status = 'rejeitado' WHERE id = %s", (user_id,))
+    get_db().commit()
     flash("❌ Usuário rejeitado.", "erro")
     return redirect(url_for("admin.aprovacoes"))

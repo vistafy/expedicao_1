@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash
 from flask_mail import Mail
 
 # Importar inicialização do banco e relatórios/avarias
-from db import get_db, close_db
+from db import get_db, get_cursor, close_db
 from config import init_db
 from relatorios import salvar_tabela, localizar_relatorios_padrao, extrair_periodo, montar_tabela
 from avarias import localizar_avarias_csv, montar_tabela_avarias, salvar_tabela_avarias
@@ -19,7 +19,7 @@ def base_dir():
         return Path(sys._MEIPASS)  # pasta temporária usada pelo PyInstaller
     return Path(__file__).parent
 
-# 📌 Configuração do Flask com paths corretos
+# 📌 Configuração do Flask
 app = Flask(
     __name__,
     template_folder=str(base_dir() / "templates"),
@@ -28,7 +28,6 @@ app = Flask(
 )
 
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "chave_local_teste")
-app.config['DATABASE'] = os.path.join(app.instance_path, 'expedicao_1.db')
 
 os.makedirs(app.instance_path, exist_ok=True)
 
@@ -65,11 +64,12 @@ class Usuario(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    conn = get_db()
-    row = conn.execute(
-        "SELECT id, username, email, senha, role, loja_id, criado_em, status FROM usuarios WHERE id = ?",
+    cur = get_cursor()
+    cur.execute(
+        "SELECT id, username, email, senha, role, loja_id, criado_em, status FROM usuarios WHERE id = %s",
         (user_id,)
-    ).fetchone()
+    )
+    row = cur.fetchone()
     if row:
         return Usuario(
             id=row["id"],
@@ -100,83 +100,22 @@ app.register_blueprint(admin_bp)
 
 # 📌 Criar ou atualizar admin automaticamente
 def criar_admin():
-    conn = get_db()
-    row = conn.execute("SELECT * FROM usuarios WHERE username = ?", ("admin",)).fetchone()
+    cur = get_cursor()
+    cur.execute("SELECT * FROM usuarios WHERE username = %s", ("admin",))
+    row = cur.fetchone()
     senha_hash = generate_password_hash("admin123")
 
     if row is None:
-        conn.execute(
-            "INSERT INTO usuarios (nome_completo, cpf, username, email, senha, role, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        cur.execute(
+            "INSERT INTO usuarios (nome_completo, cpf, username, email, senha, role, status) VALUES (%s, %s, %s, %s, %s, %s, %s)",
             ("Administrador do Sistema", "00000000000", "admin", "romulo.oliveira@hiperdb.com.br", senha_hash, "admin", "aprovado")
         )
-        conn.commit()
+        get_db().commit()
         print("✅ Usuário admin criado")
     else:
-        conn.execute("UPDATE usuarios SET senha = ?, role = 'admin', status = 'aprovado' WHERE username = ?", (senha_hash, "admin"))
-        conn.commit()
+        cur.execute("UPDATE usuarios SET senha = %s, role = 'admin', status = 'aprovado' WHERE username = %s", (senha_hash, "admin"))
+        get_db().commit()
         print("🔄 Usuário admin atualizado")
-
-# 📌 Importar produtos automaticamente
-def importar_produtos():
-    conn = get_db()
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS produtos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        departamento TEXT NOT NULL,
-        secao TEXT NOT NULL,
-        descricao TEXT NOT NULL,
-        gtin TEXT UNIQUE,
-        produto TEXT
-    )
-    """)
-    cursor = conn.execute("SELECT COUNT(*) FROM produtos")
-    total = cursor.fetchone()[0]
-
-    if total == 0:
-        print("📌 Importando produtos do CSV...")
-        caminho_csv = Path.home() / "Downloads" / "relatorio_estoque_geral.csv"
-        if not caminho_csv.exists():
-            print(f"❌ CSV não encontrado em {caminho_csv}")
-            return
-
-        df = pd.read_csv(caminho_csv, sep=";", encoding="latin1")
-        df.columns = df.columns.str.strip()
-
-        mapa_colunas = {
-            "SeÃ§Ã£o": "Seção",
-            "DescriÃ§Ã£o": "Descrição",
-            "GTIN Principal": "GTIN",
-            "Produto": "Produto",
-            "Departamento": "Departamento"
-        }
-        df = df.rename(columns=mapa_colunas)
-
-        colunas_interesse = ["Departamento", "Seção", "Descrição", "GTIN", "Produto"]
-        colunas_existentes = [c for c in colunas_interesse if c in df.columns]
-
-        if not colunas_existentes:
-            print("❌ Nenhuma coluna esperada encontrada no CSV.")
-            return
-
-        dados = df[colunas_existentes].drop_duplicates().reset_index(drop=True)
-
-        for _, row in dados.iterrows():
-            conn.execute("""
-                INSERT OR REPLACE INTO produtos (departamento, secao, descricao, gtin, produto)
-                VALUES (?, ?, ?, ?, ?)
-            """, (
-                row.get("Departamento", "DESCONHECIDO"),
-                row.get("Seção", "DESCONHECIDO"),
-                row.get("Descrição", "DESCONHECIDO"),
-                str(row.get("GTIN")) if pd.notna(row.get("GTIN")) else None,
-                row.get("Produto", "DESCONHECIDO")
-            ))
-        conn.commit()
-        print(f"✅ {len(dados)} produtos importados")
-    else:
-        print(f"📌 Banco já contém {total} produtos")
-
-    conn.close()
 
 @app.route("/")
 def index():
@@ -196,15 +135,14 @@ app.config['MAIL_DEFAULT_SENDER'] = os.environ.get("MAIL_DEFAULT_SENDER")
 
 mail = Mail(app)
 
-# 📌 Inicializar banco sempre que o app subir (inclusive no Render/Gunicorn)
+# 📌 Inicializar banco sempre que o app subir
 with app.app_context():
     init_db()
     criar_admin()
-    importar_produtos()
 
 if __name__ == "__main__":
     with app.app_context():
-        # Relatórios e avarias só localmente (evita erro no Render por falta de CSVs)
+        # Relatórios e avarias só localmente
         relatorios = localizar_relatorios_padrao()
         if relatorios:
             for arquivo in relatorios:

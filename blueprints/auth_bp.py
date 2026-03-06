@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_mail import Message
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-from db import get_db
+from db import get_cursor, get_db
 from models import Usuario
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
@@ -19,11 +19,11 @@ def login():
         username = request.form.get("username")
         senha = request.form.get("senha")
 
-        conn = get_db()
-        row = conn.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
+        cur = get_cursor()
+        cur.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
+        row = cur.fetchone()
 
         if row and check_password_hash(row["senha"], senha):
-            # 🔎 Verifica se o usuário foi aprovado
             if row["status"] != "aprovado":
                 flash("⛔ Seu cadastro ainda não foi aprovado pelo administrador.", "erro")
                 return redirect(url_for("auth.login"))
@@ -34,11 +34,12 @@ def login():
                 email=row["email"],
                 senha=row["senha"],
                 role=row["role"],
-                criado_em=row["criado_em"]
+                loja_id=row["loja_id"],
+                criado_em=row["criado_em"],
+                status=row["status"]
             )
             login_user(user)
             flash("✅ Login realizado com sucesso!", "sucesso")
-
             return redirect(url_for("index"))
         else:
             flash("⛔ Usuário ou senha inválidos.", "erro")
@@ -57,10 +58,9 @@ def logout():
 # ---------------- REGISTRO ----------------
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
-    conn = get_db()
-    cursor = conn.cursor()
-
-    lojas = cursor.execute("SELECT id, nome FROM lojas ORDER BY nome").fetchall()
+    cur = get_cursor()
+    cur.execute("SELECT id, nome FROM lojas ORDER BY nome")
+    lojas = cur.fetchall()
 
     if request.method == "POST":
         nome_completo = request.form.get("nome_completo")
@@ -77,7 +77,7 @@ def register():
 
         cpf_numeros = "".join([c for c in cpf if c.isdigit()])
         if len(cpf_numeros) != 11:
-            flash("⛔ CPF inválido. Digite no formato 000.000.000-00", "erro")
+            flash("⛔ CPF inválido.", "erro")
             return redirect(url_for("auth.register"))
 
         role = "user"
@@ -85,9 +85,12 @@ def register():
             flash("⛔ É obrigatório selecionar uma filial/loja.", "erro")
             return redirect(url_for("auth.register"))
 
-        row_user = cursor.execute("SELECT * FROM usuarios WHERE username = ?", (username,)).fetchone()
-        row_email = cursor.execute("SELECT * FROM usuarios WHERE email = ?", (email,)).fetchone()
-        row_cpf = cursor.execute("SELECT * FROM usuarios WHERE cpf = ?", (cpf_numeros,)).fetchone()
+        cur.execute("SELECT * FROM usuarios WHERE username = %s", (username,))
+        row_user = cur.fetchone()
+        cur.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+        row_email = cur.fetchone()
+        cur.execute("SELECT * FROM usuarios WHERE cpf = %s", (cpf_numeros,))
+        row_cpf = cur.fetchone()
 
         if row_user or row_email or row_cpf:
             flash("⛔ Usuário, e-mail ou CPF já existe.", "erro")
@@ -95,14 +98,17 @@ def register():
 
         senha_hash = generate_password_hash(senha)
 
-        # 🔎 Novo: usuário entra como pendente
-        cursor.execute(
-            "INSERT INTO usuarios (nome_completo, cpf, loja_id, username, email, senha, role, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (nome_completo, cpf_numeros, loja_id if role == "user" else None, username, email, senha_hash, role, "pendente")
+        cur.execute(
+            """
+            INSERT INTO usuarios (nome_completo, cpf, loja_id, username, email, senha, role, status)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (nome_completo, cpf_numeros, loja_id if role == "user" else None,
+             username, email, senha_hash, role, "pendente")
         )
-        conn.commit()
+        get_db().commit()
 
-        flash("✅ Cadastro realizado! Aguarde aprovação do administrador para acessar o sistema.", "sucesso")
+        flash("✅ Cadastro realizado! Aguarde aprovação do administrador.", "sucesso")
         return redirect(url_for("auth.login"))
 
     return render_template("auth/register.html", lojas=lojas)
@@ -119,8 +125,9 @@ def forgot_password():
             flash("⛔ CPF inválido.", "erro")
             return redirect(url_for("auth.forgot_password"))
 
-        conn = get_db()
-        row = conn.execute("SELECT * FROM usuarios WHERE email = ?", (email,)).fetchone()
+        cur = get_cursor()
+        cur.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
+        row = cur.fetchone()
 
         if not row:
             flash("⛔ CPF ou e-mail não encontrados.", "erro")
@@ -174,15 +181,15 @@ def reset_password(token):
             return redirect(url_for("auth.reset_password", token=token))
 
         senha_hash = generate_password_hash(nova_senha)
-        conn = get_db()
+        cur = get_cursor()
+        cur.execute("UPDATE usuarios SET senha = %s WHERE email = %s", (senha_hash, email))
 
-        conn.execute("UPDATE usuarios SET senha = ? WHERE email = ?", (senha_hash, email))
-
-        row = conn.execute("SELECT id FROM usuarios WHERE email = ?", (email,)).fetchone()
+        cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
+        row = cur.fetchone()
         if row:
-            conn.execute("INSERT INTO reset_logs (usuario_id) VALUES (?)", (row["id"],))
+            cur.execute("INSERT INTO reset_logs (usuario_id) VALUES (%s)", (row["id"],))
 
-        conn.commit()
+        get_db().commit()
 
         flash("✅ Senha redefinida com sucesso!", "sucesso")
         return redirect(url_for("auth.login"))

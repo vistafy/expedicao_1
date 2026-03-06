@@ -1,30 +1,23 @@
-import sqlite3
+import psycopg2
 import pandas as pd
 from pathlib import Path
 
+# 🔧 Configuração da conexão PostgreSQL
+PG_CONN = {
+    "dbname": "expedicao_1",
+    "user": "postgres",
+    "password": "rc04202894",  # troque pela sua senha real
+    "host": "localhost",
+    "port": "5432"
+}
+
 def inicializar_banco():
-    conn = sqlite3.connect("instance/expedicao_1.db")
-
-    # Cria tabela produtos se não existir, com gtin único
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS produtos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        departamento TEXT NOT NULL,
-        secao TEXT NOT NULL,
-        descricao TEXT NOT NULL,
-        gtin TEXT UNIQUE,   -- garante que não haja duplicados
-        produto TEXT
-    )
-    """)
-
-    # Índices para acelerar consultas por departamento e seção
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_produtos_departamento ON produtos(departamento)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_produtos_secao ON produtos(secao)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_produtos_departamento_secao ON produtos(departamento, secao)")
+    conn = psycopg2.connect(**PG_CONN)
+    cur = conn.cursor()
 
     # Verifica se já existem registros
-    cursor = conn.execute("SELECT COUNT(*) FROM produtos")
-    total = cursor.fetchone()[0]
+    cur.execute("SELECT COUNT(*) FROM produtos")
+    total = cur.fetchone()[0]
 
     if total == 0:
         print("📌 Tabela 'produtos' vazia. Importando do CSV...")
@@ -48,9 +41,14 @@ def inicializar_banco():
         dados = df[colunas_interesse].drop_duplicates().reset_index(drop=True)
 
         for _, row in dados.iterrows():
-            conn.execute("""
-                INSERT OR REPLACE INTO produtos (departamento, secao, descricao, gtin, produto)
-                VALUES (?, ?, ?, ?, ?)
+            cur.execute("""
+                INSERT INTO produtos (departamento, secao, descricao, gtin, produto)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (gtin) DO UPDATE
+                SET departamento = EXCLUDED.departamento,
+                    secao = EXCLUDED.secao,
+                    descricao = EXCLUDED.descricao,
+                    produto = EXCLUDED.produto
             """, (
                 row.get("Departamento", "DESCONHECIDO"),
                 row.get("Seção", "DESCONHECIDO"),
@@ -64,6 +62,7 @@ def inicializar_banco():
     else:
         print(f"📌 Banco já contém {total} produtos. Nenhuma importação necessária.")
 
+    cur.close()
     conn.close()
 
 

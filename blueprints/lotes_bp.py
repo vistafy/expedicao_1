@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, jsonify
 from flask_login import login_required, current_user
-from db import get_db
 from dados import atualizar_produtos_csv
 import xlsxwriter
 import io
+from db import get_cursor, get_db
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -14,47 +14,48 @@ lotes_bp = Blueprint("lotes", __name__, url_prefix="/lotes")
 # Função para carregar departamentos e seções do CSV
 # Função para carregar departamentos e seções direto do banco
 def carregar_departamentos_secoes_db():
-    conn = get_db()
-    departamentos = [row["departamento"] for row in conn.execute(
-        "SELECT DISTINCT departamento FROM produtos ORDER BY departamento"
-    ).fetchall()]
+    cur = get_cursor()
 
+    # Buscar todos os departamentos
+    cur.execute("SELECT DISTINCT departamento FROM produtos ORDER BY departamento")
+    departamentos = [row["departamento"] for row in cur.fetchall()]
+
+    # Buscar seções por departamento
     secoes_por_departamento = {}
     for dep in departamentos:
-        secoes = [row["secao"] for row in conn.execute(
-            "SELECT DISTINCT secao FROM produtos WHERE departamento = ? ORDER BY secao",
+        cur.execute(
+            "SELECT DISTINCT secao FROM produtos WHERE departamento = %s ORDER BY secao",
             (dep,)
-        ).fetchall()]
+        )
+        secoes = [row["secao"] for row in cur.fetchall()]
         secoes_por_departamento[dep] = secoes
 
-    conn.close()
     return departamentos, secoes_por_departamento
 
 
 # 📌 Listar lotes
-lotes_bp = Blueprint("lotes", __name__, url_prefix="/lotes")
-
 @lotes_bp.route("/", methods=["GET"])
 @login_required
 def lotes():
-    conn = get_db()
+    cur = get_cursor()
 
     if current_user.role == "admin":
-        lotes = conn.execute("""
+        cur.execute("""
             SELECT lotes.*, usuarios.username AS criador
             FROM lotes
             JOIN usuarios ON lotes.usuario_id = usuarios.id
             ORDER BY lotes.criado_em DESC
-        """).fetchall()
+        """)
     else:
-        lotes = conn.execute("""
+        cur.execute("""
             SELECT lotes.*, usuarios.username AS criador
             FROM lotes
             JOIN usuarios ON lotes.usuario_id = usuarios.id
-            WHERE lotes.usuario_id = ?
+            WHERE lotes.usuario_id = %s
             ORDER BY lotes.criado_em DESC
-        """, (current_user.id,)).fetchall()
-
+        """, (current_user.id,))
+    
+    lotes = cur.fetchall()
     return render_template("lotes/lista.html", lotes=lotes)
 
 
@@ -76,14 +77,13 @@ def criar():
         flash("⛔ Informe departamento e seção.", "erro")
         return redirect(url_for("lotes.novo"))
 
-    conn = get_db()
+    cur = get_cursor()
     # Agora vinculamos o lote ao usuário logado
-    conn.execute("""
+    cur.execute("""
         INSERT INTO lotes (usuario_id, departamento, secao, status)
-        VALUES (?, ?, ?, 'ativo')
+        VALUES (%s, %s, %s, 'ativo')
     """, (current_user.id, departamento, secao))
-    conn.commit()
-    conn.close()
+    get_db().commit()
 
     flash("✅ Lote criado com sucesso!", "sucesso")
     return redirect(url_for("lotes.lotes"))
@@ -93,22 +93,23 @@ def criar():
 @lotes_bp.route("/secoes/<departamento>")
 @login_required
 def secoes_por_departamento(departamento):
-    conn = get_db()
-    secoes = [row["secao"] for row in conn.execute(
-        "SELECT DISTINCT secao FROM produtos WHERE departamento = ? ORDER BY secao",
+    cur = get_cursor()
+    cur.execute(
+        "SELECT DISTINCT secao FROM produtos WHERE departamento = %s ORDER BY secao",
         (departamento,)
-    ).fetchall()]
-    conn.close()
+    )
+    secoes = [row["secao"] for row in cur.fetchall()]
     return jsonify(secoes)
 
 # 📌 Selecionar lojas para um lote
 @lotes_bp.route("/selecionar-lojas/<int:lote_id>", methods=["GET", "POST"])
 @login_required
 def selecionar_lojas(lote_id):
-    conn = get_db()
+    cur = get_cursor()
 
     # Busca o lote e valida permissão
-    lote = conn.execute("SELECT * FROM lotes WHERE id = ?", (lote_id,)).fetchone()
+    cur.execute("SELECT * FROM lotes WHERE id = %s", (lote_id,))
+    lote = cur.fetchone()
     if not lote or (current_user.role != "admin" and lote["usuario_id"] != current_user.id):
         flash("⛔ Você não tem permissão para acessar este lote.", "erro")
         return redirect(url_for("lotes.lotes"))
@@ -117,24 +118,24 @@ def selecionar_lojas(lote_id):
         lojas_ids = request.form.getlist("lojas")
 
         # Remove vínculos antigos e insere os novos
-        conn.execute("DELETE FROM lotes_lojas WHERE lote_id = ?", (lote_id,))
+        cur.execute("DELETE FROM lotes_lojas WHERE lote_id = %s", (lote_id,))
         for loja_id in lojas_ids:
-            conn.execute(
-                "INSERT INTO lotes_lojas (lote_id, loja_id) VALUES (?, ?)",
+            cur.execute(
+                "INSERT INTO lotes_lojas (lote_id, loja_id) VALUES (%s, %s)",
                 (lote_id, loja_id)
             )
-        conn.commit()
+        get_db().commit()
 
         flash("✅ Lojas vinculadas ao lote!", "sucesso")
         return redirect(url_for("lotes.lotes"))
 
     # Busca todas as lojas
-    lojas = conn.execute("SELECT * FROM lojas ORDER BY codigo").fetchall()
+    cur.execute("SELECT * FROM lojas ORDER BY codigo")
+    lojas = cur.fetchall()
 
     # Busca lojas já vinculadas ao lote
-    vinculadas = conn.execute(
-        "SELECT loja_id FROM lotes_lojas WHERE lote_id = ?", (lote_id,)
-    ).fetchall()
+    cur.execute("SELECT loja_id FROM lotes_lojas WHERE lote_id = %s", (lote_id,))
+    vinculadas = cur.fetchall()
     vinculadas_ids = [str(v["loja_id"]) for v in vinculadas]  # 🔧 converte para string
 
     return render_template(
@@ -148,19 +149,17 @@ def selecionar_lojas(lote_id):
 @lotes_bp.route("/registrar", methods=["GET", "POST"])
 @login_required
 def registrar():
-    conn = get_db()
-    # tenta pegar da query string ou do formulário
+    cur = get_cursor()
     lote_id = request.args.get("id") or request.form.get("lote_id")
 
     if not lote_id:
         flash("⛔ Nenhum lote selecionado.", "erro")
-        conn.close()
         return redirect(url_for("lotes.lotes"))
 
     # Buscar informações do lote
-    lote = conn.execute("SELECT * FROM lotes WHERE id = ?", (lote_id,)).fetchone()
+    cur.execute("SELECT * FROM lotes WHERE id = %s", (lote_id,))
+    lote = cur.fetchone()
     if not lote:
-        conn.close()
         flash("⛔ Lote não encontrado.", "erro")
         return redirect(url_for("lotes.lotes"))
 
@@ -168,22 +167,21 @@ def registrar():
         acao = request.form.get("acao")
         codigo = request.form.get("codigo")
         descricao = request.form.get("descricao", "")
-        gtin = request.form.get("gtin", "")   # novo campo
+        gtin = request.form.get("gtin", "")
         tara = request.form.get("tara", "0").replace(",", ".")
 
         if acao == "registrar":
-            # Validação: exige pelo menos um identificador
             if not (codigo or descricao or gtin):
                 flash("⛔ Informe Código, Descrição ou GTIN do produto.", "erro")
-                conn.close()
                 return redirect(url_for("lotes.registrar", id=lote_id))
 
-            lojas = conn.execute("""
+            cur.execute("""
                 SELECT l.id, l.codigo, l.nome
                 FROM lotes_lojas ll
                 JOIN lojas l ON ll.loja_id = l.id
-                WHERE ll.lote_id = ?
-            """, (lote_id,)).fetchall()
+                WHERE ll.lote_id = %s
+            """, (lote_id,))
+            lojas = cur.fetchall()
 
             for loja in lojas:
                 peso = request.form.get(f"peso_{loja['id']}", "0").replace(",", ".")
@@ -195,118 +193,95 @@ def registrar():
                     quantidade = int(quantidade or 0)
                 except ValueError:
                     flash("⛔ Valores inválidos para peso ou quantidade.", "erro")
-                    conn.close()
                     return redirect(url_for("lotes.registrar", id=lote_id))
 
-                # Permite salvar mesmo com peso/quantidade zerados
                 peso_liquido = max(0, peso - tara)
 
-                # Verifica se já existe registro para este lote/loja/código
-                registro_existente = conn.execute("""
+                cur.execute("""
                     SELECT id FROM registros
-                    WHERE lote_id = ? AND loja_id = ? AND codigo = ?
-                """, (lote_id, loja["id"], codigo)).fetchone()
+                    WHERE lote_id = %s AND loja_id = %s AND codigo = %s
+                """, (lote_id, loja["id"], codigo))
+                registro_existente = cur.fetchone()
 
                 if registro_existente:
-                    # Atualiza registro existente
-                    conn.execute("""
+                    cur.execute("""
                         UPDATE registros
-                        SET descricao = ?, gtin = ?, tara_kg = ?, peso_bruto_kg = ?, peso_liquido_kg = ?, quantidade = ?
-                        WHERE id = ?
-                    """, (
-                        descricao,
-                        gtin,
-                        tara,
-                        peso,
-                        peso_liquido,
-                        quantidade,
-                        registro_existente["id"]
-                    ))
+                        SET descricao = %s, gtin = %s, tara_kg = %s,
+                            peso_bruto_kg = %s, peso_liquido_kg = %s, quantidade = %s
+                        WHERE id = %s
+                    """, (descricao, gtin, tara, peso, peso_liquido, quantidade, registro_existente["id"]))
                 else:
-                    # Insere novo registro
-                    conn.execute("""
-                        INSERT INTO registros (lote_id, loja_id, codigo, descricao, gtin, tara_kg,
-                                               peso_bruto_kg, peso_liquido_kg, quantidade)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        lote_id,
-                        loja["id"],
-                        codigo,
-                        descricao,
-                        gtin,
-                        tara,
-                        peso,
-                        peso_liquido,
-                        quantidade
-                    ))
+                    cur.execute("""
+                        INSERT INTO registros (lote_id, loja_id, codigo, descricao, gtin,
+                                               tara_kg, peso_bruto_kg, peso_liquido_kg, quantidade)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (lote_id, loja["id"], codigo, descricao, gtin, tara, peso, peso_liquido, quantidade))
 
-            conn.commit()
-            conn.close()
+            get_db().commit()
             flash("✅ Produto registrado/atualizado com sucesso!", "sucesso")
             return redirect(url_for("lotes.registrar", id=lote_id))
 
         elif acao == "finalizar":
-            conn.execute("UPDATE lotes SET status = 'finalizado' WHERE id = ?", (lote_id,))
-            conn.commit()
-            conn.close()
+            cur.execute("UPDATE lotes SET status = 'finalizado' WHERE id = %s", (lote_id,))
+            get_db().commit()
             flash("📦 Lote finalizado com sucesso!", "sucesso")
             return redirect(url_for("lotes.ver_lote", lote_id=lote_id))
 
-    lojas = conn.execute("""
+    cur.execute("""
         SELECT l.id, l.codigo, l.nome
         FROM lotes_lojas ll
         JOIN lojas l ON ll.loja_id = l.id
-        WHERE ll.lote_id = ?
-    """, (lote_id,)).fetchall()
-    conn.close()
+        WHERE ll.lote_id = %s
+    """, (lote_id,))
+    lojas = cur.fetchall()
 
     return render_template("lotes/registrar.html", lote=lote, lote_id=lote_id, lojas=lojas)
+
 
 # 📌 Ver detalhes de um lote
 @lotes_bp.route("/ver/<int:lote_id>", methods=["GET"])
 @login_required
 def ver_lote(lote_id):
-    conn = get_db()
+    cur = get_cursor()
 
     # Busca o lote e dados do usuário criador
-    lote = conn.execute("""
+    cur.execute("""
         SELECT l.*, u.username AS usuario_login, u.username AS usuario_nome
         FROM lotes l
         JOIN usuarios u ON l.usuario_id = u.id
-        WHERE l.id = ?
-    """, (lote_id,)).fetchone()
+        WHERE l.id = %s
+    """, (lote_id,))
+    lote = cur.fetchone()
 
     if not lote:
         flash("⛔ Lote não encontrado.", "erro")
         return redirect(url_for("lotes.lotes"))
 
     # Busca lojas vinculadas
-    lojas = conn.execute("""
+    cur.execute("""
         SELECT nome FROM lojas
         JOIN lotes_lojas ON lojas.id = lotes_lojas.loja_id
-        WHERE lotes_lojas.lote_id = ?
+        WHERE lotes_lojas.lote_id = %s
         ORDER BY lojas.codigo
-    """, (lote_id,)).fetchall()
+    """, (lote_id,))
+    lojas = cur.fetchall()
     lojas_nomes = [l["nome"] for l in lojas]
 
     # Busca registros do lote
-    registros = conn.execute("""
+    cur.execute("""
         SELECT r.*, lojas.nome AS loja
         FROM registros r
         JOIN lojas ON r.loja_id = lojas.id
-        WHERE r.lote_id = ?
+        WHERE r.lote_id = %s
         ORDER BY r.codigo, r.loja_id
-    """, (lote_id,)).fetchall()
+    """, (lote_id,))
+    registros = cur.fetchall()
 
     # Agrupar registros por produto (código + descrição)
     agrupados = {}
     for r in registros:
         chave = f"{r['codigo']}|{r['descricao']}"
-        if chave not in agrupados:
-            agrupados[chave] = []
-        agrupados[chave].append(r)
-
-    conn.close()
+        agrupados.setdefault(chave, []).append(r)
 
     return render_template(
         "lotes/ver_lote.html",
@@ -321,12 +296,11 @@ def ver_lote(lote_id):
 @lotes_bp.route("/finalizar/<int:lote_id>", methods=["POST", "GET"])
 @login_required
 def finalizar(lote_id):
-    conn = get_db()
+    cur = get_cursor()
 
     # Atualiza status do lote
-    conn.execute("UPDATE lotes SET status = 'finalizado' WHERE id = ?", (lote_id,))
-    conn.commit()
-    conn.close()
+    cur.execute("UPDATE lotes SET status = 'finalizado' WHERE id = %s", (lote_id,))
+    get_db().commit()
 
     flash("✅ Lote finalizado com sucesso!", "sucesso")
     return redirect(url_for("lotes.ver_lote", lote_id=lote_id))
@@ -336,20 +310,21 @@ def finalizar(lote_id):
 @login_required
 def exportar_planilha():
     lote_id = request.args.get('id')
-    conn = get_db()
+    cur = get_cursor()
 
     # Busca seção do lote
-    lote = conn.execute("SELECT secao FROM lotes WHERE id=?", (lote_id,)).fetchone()
+    cur.execute("SELECT secao FROM lotes WHERE id = %s", (lote_id,))
+    lote = cur.fetchone()
 
     # Busca registros do lote
-    regs = conn.execute("""
+    cur.execute("""
         SELECT r.codigo, r.descricao, l.nome AS loja, l.codigo AS loja_codigo, r.peso_liquido_kg
         FROM registros r
         JOIN lojas l ON r.loja_id = l.id
-        WHERE r.lote_id=? AND r.peso_bruto_kg > 0
+        WHERE r.lote_id = %s AND r.peso_bruto_kg > 0
         ORDER BY r.codigo, CAST(l.codigo AS INTEGER)
-    """, (lote_id,)).fetchall()
-    conn.close()
+    """, (lote_id,))
+    regs = cur.fetchall()
 
     # Converte para DataFrame
     df = pd.DataFrame([dict(r) for r in regs])
@@ -429,47 +404,45 @@ def exportar_planilha():
 @lotes_bp.route("/excluir/<int:lote_id>", methods=["POST", "GET"])
 @login_required
 def excluir(lote_id):
-    conn = get_db()
+    cur = get_cursor()
 
     # Excluir registros vinculados ao lote
-    conn.execute("DELETE FROM registros WHERE lote_id = ?", (lote_id,))
+    cur.execute("DELETE FROM registros WHERE lote_id = %s", (lote_id,))
 
     # Excluir vínculos de lojas com o lote
-    conn.execute("DELETE FROM lotes_lojas WHERE lote_id = ?", (lote_id,))
+    cur.execute("DELETE FROM lotes_lojas WHERE lote_id = %s", (lote_id,))
 
     # Excluir o próprio lote
-    conn.execute("DELETE FROM lotes WHERE id = ?", (lote_id,))
+    cur.execute("DELETE FROM lotes WHERE id = %s", (lote_id,))
 
-    conn.commit()
-    conn.close()
+    get_db().commit()
 
     flash("🗑️ Lote e todos os registros associados foram excluídos com sucesso!", "sucesso")
     return redirect(url_for("lotes.lotes"))
 
-
+# Autocommplete
 @lotes_bp.route("/autocomplete/<int:lote_id>", methods=["GET"])
 @login_required
 def autocomplete(lote_id):
     termo = request.args.get("q", "").strip()
-
-    conn = get_db()
+    cur = get_cursor()
 
     # Busca departamento e seção do lote atual
-    lote = conn.execute(
-        "SELECT departamento, secao FROM lotes WHERE id = ?", 
+    cur.execute(
+        "SELECT departamento, secao FROM lotes WHERE id = %s", 
         (lote_id,)
-    ).fetchone()
+    )
+    lote = cur.fetchone()
 
     if not lote:
-        conn.close()
         return jsonify([])
 
     # Filtra produtos apenas do mesmo departamento e seção
-    resultados = conn.execute("""
+    cur.execute("""
         SELECT produto AS codigo, descricao, gtin
         FROM produtos
-        WHERE departamento = ? AND secao = ?
-          AND (produto LIKE ? OR descricao LIKE ? OR gtin LIKE ?)
+        WHERE departamento = %s AND secao = %s
+          AND (produto LIKE %s OR descricao LIKE %s OR gtin LIKE %s)
         LIMIT 10
     """, (
         lote["departamento"],
@@ -477,9 +450,8 @@ def autocomplete(lote_id):
         f"%{termo}%",
         f"%{termo}%",
         f"%{termo}%"
-    )).fetchall()
-
-    conn.close()
+    ))
+    resultados = cur.fetchall()
 
     sugestoes = [
         {"codigo": r["codigo"], "descricao": r["descricao"], "gtin": r["gtin"]}
@@ -491,13 +463,13 @@ def autocomplete(lote_id):
 @lotes_bp.route("/api/registro/<codigo>/<int:lote_id>", methods=["GET"])
 @login_required
 def api_registro(codigo, lote_id):
-    conn = get_db()
-    registros = conn.execute("""
+    cur = get_cursor()
+    cur.execute("""
         SELECT loja_id, tara_kg AS tara, peso_bruto_kg AS peso, quantidade
         FROM registros
-        WHERE lote_id = ? AND codigo = ?
-    """, (lote_id, codigo)).fetchall()
-    conn.close()
+        WHERE lote_id = %s AND codigo = %s
+    """, (lote_id, codigo))
+    registros = cur.fetchall()
 
     resultado = [
         {
@@ -509,6 +481,7 @@ def api_registro(codigo, lote_id):
         for r in registros
     ]
     return jsonify(resultado)
+
 
 @lotes_bp.route("/atualizar-produtos", methods=["POST", "GET"])
 @login_required
