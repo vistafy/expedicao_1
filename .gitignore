@@ -1,7 +1,7 @@
-# Banco de dados SQLite
-#instance/expedicao_1.db
+# Banco de dados SQLite antigo (não usar mais, mas mantido por segurança)
+instance/expedicao_1.db
 
-# Arquivos de migração
+# Arquivos de migração (Flask-Migrate, Alembic)
 migrations/
 
 # Cache do Python
@@ -13,14 +13,21 @@ __pycache__/
 # Logs
 *.log
 
-# Configurações locais
+# Configurações locais (credenciais e variáveis de ambiente)
 .env
 *.env
+.env.local
+.env.dev
+.env.prod
 
 # Arquivos temporários
 *.tmp
 *.swp
 *.bak
+
+# Dumps e backups de banco
+*.sql
+*.dump
 
 # Build e distribuição
 build/
