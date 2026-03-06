@@ -1,8 +1,6 @@
 Flask==3.1.2
 Flask-Login==0.6.3
 Flask-Mail==0.10.0
-Flask-SQLAlchemy==3.1.1
-SQLAlchemy==2.0.46
 Werkzeug==3.1.5
 Jinja2==3.1.6
 itsdangerous==2.2.0
@@ -11,3 +9,4 @@ gunicorn
 waitress
 pandas==2.2.2
 XlsxWriter==3.2.0
+psycopg2-binary==2.9.9
