@@ -6,6 +6,12 @@ from flask import Flask, render_template
 from flask_login import LoginManager, UserMixin
 from werkzeug.security import generate_password_hash
 from flask_mail import Mail
+from dotenv import load_dotenv
+
+
+
+# Carregar variáveis do .env
+load_dotenv ()
 
 # Importar inicialização do banco e relatórios/avarias
 from db import get_db, get_cursor, close_db
